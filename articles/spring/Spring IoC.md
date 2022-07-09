@@ -4,9 +4,9 @@
 
 本文以分析Spring IoC相关的源码为主，不同版本之间可能存在差异，我采用的版本是`5.2.2.RELESAE`。
 
-## 概述
+## 引言
 
-Spring是一个渐进式的框架，不具备很强的侵入性，实际上，我们只需要引入spring-context就可以使用基本的功能了。spring-context会自动引入spring-core、spring-beans、spring-aop等几个基础jar包。我们重点关注的是基于Xml配置的方式。先引入基本的Maven依赖。
+Spring是一个渐进式的框架，不具备很强的侵入性，实际上，我们只需要引入spring-context就可以使用基本的功能了。spring-context会自动引入spring-core、spring-beans、spring-aop等几个基础jar包。先引入基本的Maven依赖。
 
 ```xml
 <dependency>
@@ -82,29 +82,83 @@ public class ApplicationContextDemo {
 }
 ```
 
-以上就是Spring IoC一个很简单的应用，把对User的控制，交给Spring IoC容器。启动过程中，用ApplicationContext负责创建bean 实例。
+以上就是Spring IoC一个很简单的应用，把对User的控制，交给Spring IoC容器。
 
+## 概要
 
-## ClassPathXmlApplicationContext 启动过程分析
+本小节会介绍一些重要的接口和部分实现类。
 
-ApplicationContext是Spring为应用程序提供了一个底层接口，上层的`ClassPathXmlApplicationContext`和`AnnotationConfigApplicationContext`都间接的实现了它，ApplicationContext也是BeanFactory的子接口，对于Bean相关的操作都委托给BeanFactory来处理。
+### BeanFactory
 
-这里只列出ApplicationContext的部分集成关系和方法：
+首先是`BeanFactory`接口。话不多说，先上类图（只展示部分方法）：
 
 ```mermaid
 classDiagram
-    ListableBeanFactory <-- ApplicationContext
-    HierarchicalBeanFactory <-- ApplicationContext
-    BeanFactory <-- ListableBeanFactory
-    BeanFactory <-- HierarchicalBeanFactory
-    ApplicationContext: +getId()
-    ApplicationContext: +getApplicationName()
+  class BeanFactory {
+    <<interface>>
+    getBean(string name) Object
+    getBean(Class~T~ requiredType) T
+    getBeanProvider(Class~T~ requiredType) ObjectProvider~T~
+    containsBean(string name) boolean
+    isSingleton(String name) boolean
+  }
+```
+可以看出，`BeanFactory` 提供了大量get方法用于访问bean对象，`BeanFactory`是应用程序中所有bean对象的中央注册表，所以也可以说`BeanFactory`是Spring IoC容器。
 
-    BeanFactory: +getBean(...)
-    ListableBeanFactory: +getBeanNamesForType(...)
-    HierarchicalBeanFactory: +getParentBeanFactory()
+当然，除非有不得已的理由，我们一般不会直接使用`BeanFactory`，而是使用`ApplicationContext`，后者也间接继承了前者
+
+### ApplicationContext
+
+`ApplicationContext`类代表了Spring IoC容器，他负责加载、实例化、配置、组装bean对象，Spring官方也提供了一些默认的加载方式，比如通过`ClassPathXmlApplicationContext`的实现提供了加载class path下xml配置文件的方式，另外常见的还有通过注解的形式加载bean对象，见`AnnotationConfigApplicationContext`类。
+
+看一下ApplicationContext的类图：
+
+```mermaid
+classDiagram
+  class BeanFactory {
+    <<interface>>
+  }
+  class ListableBeanFactory{
+    <<interface>> 
+  }
+  
+  class HierarchicalBeanFactory {
+    <<interface>>
+  }
+  class EnvironmentCapable {
+    <<interface>>
+  }
+  class MessageSource {
+    <<interface>>
+  }
+
+  class ApplicationEventPublisher {
+    <<interface>>
+  }
+  class ApplicationContext {
+    <<interface>>
+    getId() string
+    getApplicationName() string
+    getParent() ApplicationContext
+    getAutowireCapableBeanFactory() AutowireCapableBeanFactory
+  }
+
+  ListableBeanFactory <|.. ApplicationContext
+  HierarchicalBeanFactory <|.. ApplicationContext
+  EnvironmentCapable <|.. ApplicationContext
+  MessageSource <|.. ApplicationContext
+  ApplicationEventPublisher <|.. ApplicationContext
+  BeanFactory <|.. ListableBeanFactory
+  BeanFactory <|.. HierarchicalBeanFactory 
 
 ```
+
+通过类图可以看出，`ApplicationContext`间接实现了`BeanFactory`接口，所以我们也可以把他当做bean的工厂来使用，与此同时也实现`MessageSource`和`ApplicationEventPublisher`等接口，这里并没有完全给出继承关系，仅供参考。
+
+
+## 容器启动过程分析
+
+`ClassPathXmlApplicationContext`是`ApplicationContext`的一个实现类，他提供了通过读取class path下的xml配置文件的方式加载bean对象，具体的时候我们在前边讨论过了，这里不在赘述。下边具体分析启动步骤。
 
 实例化时候，我们传入配置文件的路径，程序会解析这个路径，并调用`refresh()`方法。
 
@@ -183,26 +237,44 @@ public void refresh() throws BeansException, IllegalStateException {
 }
 ```
 
-下边分析一下refresh函数里一些重要的方法。
+下边具体分析一下refresh函数里一些重要的方法。
 
 ### 刷新BeanFactory
 
-这里我们解析一下`obtainFreshBeanFactory()`方法。该
+这里我们解析一下`obtainFreshBeanFactory()`方法。这个方法可以分成两部分理解。
+
+如果之前存在BeanFactory，则会先调用清理方法，删除Beans、关闭beanFactory，否则会生成新的BeanFactory，并加载BeanDefinitions，这里我们使用的xml配置的形式，所以会通过XmlBeanDefinitionReader类加载bean定义。
+
+代码如下
+
 ```java
+protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+    // 如果已经存在bean factory则会做一些清楚的工作
     if (hasBeanFactory()) {
+      // 销毁所有的单例 bean。
 			destroyBeans();
+      // 关闭bean factory。这里只是将application context中的beanFactory指向null
 			closeBeanFactory();
 		}
 		try {
+      // 创建bean factory，并设置父级的bean factory
 			DefaultListableBeanFactory beanFactory = createBeanFactory();
 			beanFactory.setSerializationId(getId());
+      // bean factory的一些定制化设置
 			customizeBeanFactory(beanFactory);
+      // 加载bean定义，这里通过XmlBeanDefinitionReader加载bean的定义
 			loadBeanDefinitions(beanFactory);
 			synchronized (this.beanFactoryMonitor) {
 				this.beanFactory = beanFactory;
 			}
+
+      return beanFactory;
 		}
 		catch (IOException ex) {
 			throw new ApplicationContextException("I/O error parsing bean definition source for " + getDisplayName(), ex);
 		}
+}
 ```
+
+## 参考资料
+

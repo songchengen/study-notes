@@ -1,1 +1,1 @@
-- [[Spring IoC ]]
+- [[Spring 依赖注入]]

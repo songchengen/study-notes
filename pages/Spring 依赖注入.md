@@ -102,10 +102,44 @@
 		- @Inject(可选）
 		- @Bean
 	- 接口回调
+	  collapsed:: true
 		- Aware系列接口
-		  |    内建接口   |   说明    |
-		  |    ------        |    ------ |
-		  | BeanFactoryAware| 获取IoC容器 - BeanFactory |
+		  实现Aware一系列的接口，可以通过回调的方式获取Spring的一些bean 对象，比如通过实现`BeanFactoryAware`接口，获得`BeanFactory`对象
 		-
 		-
--
+- 限定注入
+	- @Qualifier("bean id")注解
+	  ```java
+	  @Autowired
+	  @Qualifier("superUser")
+	  private User user;
+	  ```
+	- @Qualifier 进行逻辑分组
+	  ```java
+	  @Bean
+	  @Qualifier // 分组限定
+	  public User user1() {
+	    return new User(1l);
+	  }
+	  
+	  @Bean
+	  @Qualifier // 分组限定
+	  public User user2() {
+	    return new User(2l);
+	  }
+	  
+	  @Autowired
+	  @Qualifier("superUser")
+	  private User user; // 限定ID位superUser的 user Bean
+	  
+	  @Autowired
+	  private User user; // 标记了primary的user Bean
+	  
+	  @Autowired
+	  private List<User> allUsers; // 所有的user beans，包含user1和user2
+	  
+	  @Autowired
+	  @Qualifier
+	  private List<User> qualifiedUsers; // 加了Qualifier注解限定的user beans，这里有user1 和user2
+	  ```
+	-

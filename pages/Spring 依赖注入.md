@@ -105,9 +105,8 @@
 	  collapsed:: true
 		- Aware系列接口
 		  实现Aware一系列的接口，可以通过回调的方式获取Spring的一些bean 对象，比如通过实现`BeanFactoryAware`接口，获得`BeanFactory`对象
-		-
-		-
 - 限定注入
+  collapsed:: true
 	- @Qualifier("bean id")注解
 	  ```java
 	  @Autowired
@@ -129,17 +128,27 @@
 	  }
 	  
 	  @Autowired
-	  @Qualifier("superUser")
-	  private User user; // 限定ID位superUser的 user Bean
+	  @Qualifier("specialUser")
+	  private User user; // 限定ID位specialUser的 user Bean
 	  
 	  @Autowired
-	  private User user; // 标记了primary的user Bean
+	  private User user; // 标记了@Primary的user Bean
 	  
+	  // TODO
+	  // 这里实际上并不包含user1和user2，原理是啥我也没搞懂
+	  // 但是如果把user1或user2改成静态方法，那么这里就能包含了
 	  @Autowired
 	  private List<User> allUsers; // 所有的user beans，包含user1和user2
 	  
 	  @Autowired
 	  @Qualifier
-	  private List<User> qualifiedUsers; // 加了Qualifier注解限定的user beans，这里有user1 和user2
+	  private List<User> qualifiedUsers; // 加了Qualifier注解限定的user beans，这里只有user1 和user2
 	  ```
+	- 自定义@Qualifier的派生注解分组
+	  比如@LoadBalanced
 	-
+- 延迟注入
+	- 通过ObjectFactory实现延迟注入
+	- 通过@Autowired和@Lazy延迟注入
+- 依赖注入的源码流程
+	- 核心是`DefaultListableBeanFactory:resolveDependency`方法
